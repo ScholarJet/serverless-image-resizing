@@ -1,10 +1,19 @@
 'use strict';
 
+const FILE_TYPE_KEYS = {
+  video: 'VIDEO',
+  image: 'IMAGE',
+  pdf: 'PDF',
+  other: 'OTHER'
+};
+
 const AWS = require('aws-sdk');
 const S3 = new AWS.S3({
   signatureVersion: 'v4',
 });
-const Sharp = require('sharp');
+// const Sharp = require('sharp');
+
+import * as Sharp from 'sharp';
 
 const BUCKET = process.env.BUCKET;
 const URL = process.env.URL;
@@ -15,7 +24,7 @@ if (process.env.ALLOWED_DIMENSIONS) {
   dimensions.forEach((dimension) => ALLOWED_DIMENSIONS.add(dimension));
 }
 
-exports.handler = function(event, context, callback) {
+export const handler = function(event, context, callback) {
   const key = event.queryStringParameters.key;
   const match = key.match(/((\d+)x(\d+))\/(.*)/);
   const dimensions = match[1];
@@ -52,4 +61,26 @@ exports.handler = function(event, context, callback) {
       })
     )
     .catch(err => callback(err))
-}
+};
+
+/**
+ * Returns the object type
+ * @returns string ('VIDEO', 'IMAGE', 'PDF', 'OTHER' for everything else)
+ * @param object
+ */
+const getObjectType = object => {
+  if (object.ContentType.indexOf('video') >= 0) {
+    return FILE_TYPE_KEYS.video;
+  } else if (object.ContentType.indexOf('image') >= 0) {
+    return FILE_TYPE_KEYS.image;
+  } else if (object.ContentType.indexOf('pdf') >= 0) {
+    return FILE_TYPE_KEYS.pdf;
+  } else {
+    return FILE_TYPE_KEYS.other;
+  }
+};
+
+const generateThumbnail = object => {
+
+};
+
