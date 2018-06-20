@@ -1,4 +1,5 @@
 'use strict';
+process.env.PATH = process.env.PATH + ":/var/task";
 
 const FILE_TYPE_KEYS = {
   video: 'VIDEO',
@@ -8,12 +9,17 @@ const FILE_TYPE_KEYS = {
 };
 
 const AWS = require('aws-sdk');
+
+const Generators = {
+  video: require('./generators/generate-video-thumbnail').generate,
+  image: require('./generators/generate-image-thumbnail').generate,
+  pdf: require('./generators/generate-pdf-thumbnail')
+};
+
 const S3 = new AWS.S3({
   signatureVersion: 'v4',
 });
-// const Sharp = require('sharp');
-
-import * as Sharp from 'sharp';
+const Sharp = require('sharp');
 
 const BUCKET = process.env.BUCKET;
 const URL = process.env.URL;
@@ -24,7 +30,7 @@ if (process.env.ALLOWED_DIMENSIONS) {
   dimensions.forEach((dimension) => ALLOWED_DIMENSIONS.add(dimension));
 }
 
-export const handler = function(event, context, callback) {
+module.exports.handler = function(event, context, callback) {
   const key = event.queryStringParameters.key;
   const match = key.match(/((\d+)x(\d+))\/(.*)/);
   const dimensions = match[1];
@@ -42,11 +48,20 @@ export const handler = function(event, context, callback) {
   }
 
   S3.getObject({Bucket: BUCKET, Key: originalKey}).promise()
-    .then(data => Sharp(data.Body)
-      .resize(width, height)
-      .toFormat('png')
-      .toBuffer()
-    )
+    .then(data => {
+      switch (getObjectType(data)) {
+        case FILE_TYPE_KEYS.image:
+          return Sharp(data.Body)
+            .resize(width, height)
+            .toFormat('png')
+            .toBuffer();
+        case FILE_TYPE_KEYS.video:
+          return Generators.video(S3.getSignedUrl('getObject', {Bucket: BUCKET, Key: originalKey}));
+        case FILE_TYPE_KEYS.pdf:
+        case FILE_TYPE_KEYS.other:
+          break;
+      }
+    })
     .then(buffer => S3.putObject({
         Body: buffer,
         Bucket: BUCKET,
@@ -69,6 +84,7 @@ export const handler = function(event, context, callback) {
  * @param object
  */
 const getObjectType = object => {
+  console.log('Getting object type:', object);
   if (object.ContentType.indexOf('video') >= 0) {
     return FILE_TYPE_KEYS.video;
   } else if (object.ContentType.indexOf('image') >= 0) {

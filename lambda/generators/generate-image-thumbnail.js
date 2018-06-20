@@ -1,4 +1,4 @@
-import * as Sharp from 'sharp';
+const Sharp  = require('sharp');
 
 const DEFAULT_THUMBNAIL_FORMAT = 'png';
 
@@ -9,13 +9,9 @@ const DEFAULT_THUMBNAIL_FORMAT = 'png';
  * @param height the desired height
  * @returns {buffer}
  */
-const generate = (object, width, height) => {
+module.exports.generate = (object, width, height) => {
   return Sharp(object.Body)
     .resize(width, height)
     .toFormat(DEFAULT_THUMBNAIL_FORMAT)
     .toBuffer();
-};
-
-export const ImageThumbnailGenerator = {
-  generate
 };
