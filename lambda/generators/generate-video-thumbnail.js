@@ -1,7 +1,7 @@
 // Used to run commands
 const child_process = require('child_process');
-// Wrapper to get video info using mediainfo
-const mediainfo = require('mediainfo-wrapper');
+
+const fluentFfmpeg = require('fluent-ffmpeg');
 
 const fs = require('fs');
 const DEFAULT_TIME_MARK = 5;
@@ -37,22 +37,15 @@ module.exports.generate = (objectPath,
   if (!width || !height) {
     log('Generating with media info');
     return new Promise((resolve, reject) => {
-      mediainfo(objectPath)
-        .then(data => {
-          const metadata = {};
-
-          for (let i in data) {
-
-            for (let x in data[i].video) {
-              metadata.Width = data[i].video[0].width[0]; //Width in pixels
-              metadata.Height = data[i].video[0].height[0]; //Height in pixels
-              break;
-            }
-          }
-
-          _generateThumbnail(objectPath, metadata.width, metadata.height, timeMark, count, outputFilename)
+      fluentFfmpeg(objectPath).ffprobe(0, (error, data) => {
+        if (error) {
+          reject(new VideoGenerationError(error));
+          done();
+        } else {
+          _generateThumbnail(objectPath, data.streams[1].width, data.streams[1].height, timeMark, count, outputFilename)
             .then(resolve, reject);
-        }, reject)
+        }
+      });
     });
   } else {
     return _generateThumbnail(objectPath, width, height, timeMark, count, outputFilename);

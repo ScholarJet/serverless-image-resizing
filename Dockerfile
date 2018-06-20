@@ -14,17 +14,4 @@ RUN yum -y install gcc-c++ && \
     yum clean all && \
     rm --force ns.rpm
 
-# Get mediainfo
-RUN yum -y groups mark install "Development Tools"
-RUN yum -y groups mark convert "Development Tools"
-RUN yum -y groupinstall 'Development Tools'
-RUN yum -y install libcurl-devel
-
-RUN curl -O https://mediaarea.net/download/binary/mediainfo/0.7.91/MediaInfo_CLI_0.7.91_GNU_FromSource.tar.gz
-
-RUN tar xvf MediaInfo_CLI_0.7.91_GNU_FromSource.tar.gz
-
-RUN cd MediaInfo_CLI_GNU_FromSource && \
-    ./CLI_Compile.sh --with-libcurl && echo done3
-
 WORKDIR /build
