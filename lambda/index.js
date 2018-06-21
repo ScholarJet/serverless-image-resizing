@@ -16,14 +16,17 @@ const Generators = {
   pdf: require('./generators/generate-pdf-thumbnail')
 };
 
+const log = require('./util/log').log;
+
 const S3 = new AWS.S3({
   signatureVersion: 'v4',
 });
 const Sharp = require('sharp');
 
-const BUCKET = process.env.BUCKET;
+const SOURCE_BUCKET = process.env.SOURCE_BUCKET;
 const URL = process.env.URL;
 const ALLOWED_DIMENSIONS = new Set();
+const THUMBNAIL_DESTINATION_BUCKET = process.env.THUMBNAIL_DESTINATION_BUCKET;
 
 if (process.env.ALLOWED_DIMENSIONS) {
   const dimensions = process.env.ALLOWED_DIMENSIONS.split(/\s*,\s*/);
@@ -33,6 +36,7 @@ if (process.env.ALLOWED_DIMENSIONS) {
 module.exports.handler = function(event, context, callback) {
   const key = event.queryStringParameters.key;
   const match = key.match(/((\d+)x(\d+))\/(.*)/);
+  log('Getting dimensions', key, match);
   const dimensions = match[1];
   const width = parseInt(match[2], 10);
   const height = parseInt(match[3], 10);
@@ -47,16 +51,29 @@ module.exports.handler = function(event, context, callback) {
     return;
   }
 
-  S3.getObject({Bucket: BUCKET, Key: originalKey}).promise()
+  log('Getting object', originalKey);
+
+  S3.getObject({Bucket: SOURCE_BUCKET, Key: originalKey}).promise()
     .then(data => {
-      switch (getObjectType(data)) {
+      log('Got object');
+
+      log('Getting object type');
+      const OBJECT_TYPE = getObjectType(data);
+      log('Object type is: ', OBJECT_TYPE);
+
+      switch (OBJECT_TYPE) {
         case FILE_TYPE_KEYS.image:
           return Sharp(data.Body)
             .resize(width, height)
             .toFormat('png')
             .toBuffer();
         case FILE_TYPE_KEYS.video:
-          return Generators.video(S3.getSignedUrl('getObject', {Bucket: BUCKET, Key: originalKey}));
+          log('Getting video signed URL');
+
+          const OBJECT_URL = getOriginalObjectUrl(data, SOURCE_BUCKET, originalKey);
+
+          log('Got video signed URL:', OBJECT_URL);
+          return Generators.video(OBJECT_URL, width, height);
         case FILE_TYPE_KEYS.pdf:
         case FILE_TYPE_KEYS.other:
           break;
@@ -64,7 +81,7 @@ module.exports.handler = function(event, context, callback) {
     })
     .then(buffer => S3.putObject({
         Body: buffer,
-        Bucket: BUCKET,
+        Bucket: THUMBNAIL_DESTINATION_BUCKET,
         ContentType: 'image/png',
         Key: key,
       }).promise()
@@ -96,7 +113,8 @@ const getObjectType = object => {
   }
 };
 
-const generateThumbnail = object => {
-
+const getOriginalObjectUrl = (object, bucket, key) => {
+  return object.ACL === 'private' ? S3.getSignedUrl('getObject', {Bucket: SOURCE_BUCKET, Key: originalKey})
+    : `https://s3.amazonaws.com/${bucket}/${key}`;
 };
 

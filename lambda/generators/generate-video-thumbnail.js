@@ -1,9 +1,10 @@
 // Used to run commands
 const child_process = require('child_process');
 
-const fluentFfmpeg = require('fluent-ffmpeg');
+const mediaInfo = require('mediainfo-wrapper');
 
 const fs = require('fs');
+const https = require('https');
 const DEFAULT_TIME_MARK = 5;
 
 const DEFAULT_QSCALEV = '2';
@@ -11,9 +12,9 @@ const DEFAULT_FRAMES = '1';
 
 const DEFAULT_TEMP_FILENAME = '/tmp/vid-screenshot.jpg';
 
-const DEBUG = true;
+const log = require('../util/log').log;
 
-const log = DEBUG ? console.log.bind(console) : () => {};
+const DEFAULT_VIDEO_HEAD_FILENAME = '/tmp/video-head';
 
 /**
  *
@@ -37,15 +38,13 @@ module.exports.generate = (objectPath,
   if (!width || !height) {
     log('Generating with media info');
     return new Promise((resolve, reject) => {
-      fluentFfmpeg(objectPath).ffprobe(0, (error, data) => {
-        if (error) {
-          reject(new VideoGenerationError(error));
-          done();
-        } else {
-          _generateThumbnail(objectPath, data.streams[1].width, data.streams[1].height, timeMark, count, outputFilename)
+      getVideoDimenssions(objectPath)
+        .then(dimensions => {
+          log('Got dimensions', dimensions);
+          _generateThumbnail(objectPath, dimensions.width, dimensions.height, timeMark, count, outputFilename)
             .then(resolve, reject);
-        }
-      });
+          done();
+        }, reject);
     });
   } else {
     return _generateThumbnail(objectPath, width, height, timeMark, count, outputFilename);
@@ -96,10 +95,7 @@ const _generateThumbnail = (objectPath,
       if (code !== 0) {
         reject(new VideoGenerationError(`Error generating video thumbnail. Process ended with code ${code}.`))
       } else {
-        resolve({
-          code,
-          readStream: fs.createReadStream(outputFilename)
-        });
+        resolve(fs.createReadStream(outputFilename));
       }
       done();
     });
@@ -131,4 +127,50 @@ class VideoGenerationError extends Error {
 
 const done = () => {
   console.timeEnd('video-thumbnail');
+};
+
+/**
+ *
+ * @param videoUrl
+ * @return {Promise<{width,height}>}
+ */
+const getVideoDimenssions = (videoUrl) => {
+  log('Getting video dimensions');
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(DEFAULT_VIDEO_HEAD_FILENAME);
+    let bytesReceived = 0;
+    https.get(videoUrl, res => {
+      log('Getting head of video');
+      res.pipe(file);
+      res.on('data', chunk => {
+        bytesReceived += chunk.length;
+        log('Received video chunk', chunk.length, bytesReceived);
+        if (bytesReceived > 15240) {
+          res.destroy();
+          file.close();
+          log('Got video head, getting media info');
+          _getMediaInfo(DEFAULT_VIDEO_HEAD_FILENAME)
+            .then(resolve, reject);
+          }
+      });
+    });
+  });
+};
+
+const _getMediaInfo = (fileName) => {
+  log('Getting media info');
+  return new Promise((resolve, reject) => {
+    mediaInfo(fileName).then(function(data) {
+      log('Got media info', data);
+      for (let i in data) {
+        for (let x in data[i].video) {
+          resolve({
+            width: data[i].video[0].width[0],
+            height: data[i].video[0].height[0]
+          });
+          break;
+        }
+      }
+    }).catch(reject);
+  });
 };
