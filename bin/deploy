@@ -4,7 +4,7 @@ set -o errexit
 
 stack_name=ServerlessImageResize
 region="$(aws configure get region)"
-bucket_name="temp-serverless-resize-$(openssl rand -hex 8)"
+bucket_name="scholarjet-development"
 account_id="$(aws sts get-caller-identity --query Account --output text \
   | xargs echo -n | tr -d '\r')"
 
@@ -13,7 +13,7 @@ set -o xtrace
 sed -e "s/REGION/${region}/g" -e "s/ACCOUNT_ID/${account_id}/g" \
   api-template.yaml > deploy/api.yaml
 
-aws s3 mb "s3://${bucket_name}"
+# aws s3 mb "s3://${bucket_name}"
 
 aws cloudformation package \
   --output-template-file=deploy/output.yaml \
