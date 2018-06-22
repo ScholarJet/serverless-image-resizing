@@ -35,7 +35,8 @@ if (process.env.ALLOWED_DIMENSIONS) {
 }
 
 module.exports.handler = function(event, context, callback) {
-  const url = `https://s3.amazonaws.com/${SOURCE_BUCKET}/${event.queryStringParameters.key.match(/((\d+)x(\d+))\/(.*)/)[4]}`;
+  const url = `https://s3.amazonaws.com/${SOURCE_BUCKET}/${getKeyInformation(event.queryStringParameters.key)
+    .originalKeyWithParams}`;
   getCanAccess(url)
     .then(canAccess => {
       if (canAccess) {
@@ -52,16 +53,11 @@ module.exports.handler = function(event, context, callback) {
 };
 
 const handler = (event, context, callback) => {
-  const key = event.queryStringParameters.key;
-  const match = key.match(/((\d+)x(\d+))\/(.*)/);
-  log('Getting dimensions', key, match);
-  const dimensions = match[1];
-  const width = parseInt(match[2], 10);
-  const height = parseInt(match[3], 10);
+  const keyInfo = getKeyInformation(event.queryStringParameters.key);
 
-  const { originalKey } = getKeyInformation(match[4]);
+  log('Getting dimensions',keyInfo);
 
-  if(ALLOWED_DIMENSIONS.size > 0 && !ALLOWED_DIMENSIONS.has(dimensions)) {
+  if(ALLOWED_DIMENSIONS.size > 0 && !ALLOWED_DIMENSIONS.has(keyInfo.dimensions)) {
     callback(null, {
       statusCode: '403',
       headers: {},
@@ -70,9 +66,9 @@ const handler = (event, context, callback) => {
     return;
   }
 
-  log('Getting object', originalKey);
+  log('Getting object', keyInfo.originalKeyWithParams);
 
-  S3.getObject({Bucket: SOURCE_BUCKET, Key: originalKey}).promise()
+  S3.getObject({Bucket: SOURCE_BUCKET, Key: keyInfo.originalKey}).promise()
     .then(data => {
       log('Got object');
 
@@ -83,16 +79,16 @@ const handler = (event, context, callback) => {
       switch (OBJECT_TYPE) {
         case FILE_TYPE_KEYS.image:
           return Sharp(data.Body)
-            .resize(width, height)
+            .resize(keyInfo.width, keyInfo.height)
             .toFormat('png')
             .toBuffer();
         case FILE_TYPE_KEYS.video:
           log('Getting video signed URL');
 
-          const OBJECT_URL = getOriginalObjectUrl(data, SOURCE_BUCKET, originalKey);
+          const OBJECT_URL = getOriginalObjectUrl(data, SOURCE_BUCKET, keyInfo.originalKey);
 
           log('Got video signed URL:', OBJECT_URL);
-          return Generators.video(OBJECT_URL, width, height);
+          return Generators.video(OBJECT_URL, keyInfo.width, keyInfo.height);
         case FILE_TYPE_KEYS.pdf:
         case FILE_TYPE_KEYS.other:
           break;
@@ -104,14 +100,14 @@ const handler = (event, context, callback) => {
         Body: buffer,
         Bucket: THUMBNAIL_DESTINATION_BUCKET,
         ContentType: 'image/png',
-        Key: key,
+        Key: keyInfo.thumbnailKey,
       }).promise();
     })
     .then(() => {
-      log('Thumbnail saved to bucket, returning redirect:', `${URL}/${key}`);
+      log('Thumbnail saved to bucket, returning redirect:', `${URL}/${keyInfo.thumbnailKey}`);
       return callback(null, {
         statusCode: '301',
-        headers: {'location': `${URL}/${key}`},
+        headers: {'location': `${URL}/${keyInfo.thumbnailKey}`},
         body: '',
       });
     })
@@ -166,31 +162,27 @@ const getCanAccess = url => {
 };
 
 /**
- * Returns the key information
+ *
  * @param key
- * @returns {{originalKey: string, originalParams: string|undefined}}
+ * @returns {{originalKey: string, originalParams: any, originalKeyWithParams: string, thumbnailKey: string, thumbnailKeyWithParams: *, thumbnailKeyParams: any, width: number, height: number, dimensions: *}}
  */
 const getKeyInformation = key => {
   const match = key.match(/((\d+)x(\d+))\/(.*)/);
   log('Getting dimensions', key, match);
 
-  const dimensions = match[1];
-  const width = parseInt(match[2], 10);
-  const height = parseInt(match[3], 10);
-  const originalKeyWithParams = match[4];
-
-  const hasParams = originalKeyWithParams.indexOf('?') >= 0;
-  const originalKey =  hasParams ? originalKeyWithParams.substr(0, originalKeyWithParams.indexOf('?')) : key;
-  const originalParams = hasParams ? originalKeyWithParams.substr(originalKeyWithParams.indexOf('?')) : undefined;
-
-  const originalPathInfo = getPathInfo(originalKeyWithParams);
+  const originalPathInfo = getPathInfo(match[4]);
   const fullPathInfo = getPathInfo(key);
 
   return {
-    originalKey,
-    originalParams,
-    key: key,
-    keyWithParams: key
+    originalKey: originalPathInfo.pathWithoutParams,
+    originalParams: originalPathInfo.params,
+    originalKeyWithParams: originalPathInfo.pathWithoutParams,
+    thumbnailKey: fullPathInfo.pathWithoutParams,
+    thumbnailKeyWithParams: key,
+    thumbnailKeyParams: fullPathInfo.params,
+    width: parseInt(match[2], 10),
+    height: parseInt(match[3], 10),
+    dimensions: match[1]
   };
 };
 
@@ -201,7 +193,7 @@ const getKeyInformation = key => {
  */
 const getPathInfo = path => {
   const hasParams = path.indexOf('?') >= 0;
-  const pathWithoutParams =  hasParams ? path.substr(0, path.indexOf('?')) : key;
+  const pathWithoutParams =  hasParams ? path.substr(0, path.indexOf('?')) : path;
   const params = hasParams ? path.substr(path.indexOf('?')) : undefined;
 
   return {
