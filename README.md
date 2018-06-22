@@ -25,7 +25,7 @@ image will be served from S3 directly.
      install Node.js and developer tools, and build the extensions using Docker.
      Run `make all`.
 
-2. Deploy the CloudFormation stack
+2. Deploy the CloudFormation stack (see last section for manual deployment)
 
     Run `bin/deploy` to deploy the CloudFormation stack. It will create a
     temporary Amazon S3 bucket, package and upload the function, and create the
@@ -55,6 +55,60 @@ image will be served from S3 directly.
     *(HEIGHT)x(WIDTH),(HEIGHT)x(WIDTH),...*.
 
     For example: *300x300,90x90,40x40*.
+
+## Manual Deployment
+
+More information at https://aws.amazon.com/blogs/compute/resize-images-on-the-fly-with-amazon-s3-aws-lambda-and-amazon-api-gateway/
+
+```xml
+<RoutingRules>
+    <RoutingRule>
+        <Condition>
+            <KeyPrefixEquals/>
+            <HttpErrorCodeReturnedEquals>404</HttpErrorCodeReturnedEquals>
+        </Condition>
+        <Redirect>
+            <Protocol>https</Protocol>
+            <HostName>__YOUR_API_HOSTNAME_HERE__</HostName>
+            <ReplaceKeyPrefixWith>prod/resize?key=</ReplaceKeyPrefixWith>
+            <HttpRedirectCode>307</HttpRedirectCode>
+        </Redirect>
+    </RoutingRule>
+</RoutingRules>
+```
+
+* Create destination bucket
+* Give destination bucket static website permission and make it public
+* Add redirection to the static hosting configuration
+
+
+* Create lambda
+* Give read permissions to source bucket (where the original files exist)
+* Give read and write permission to destination bucket (where the thumbnails are going to live)
+
+* Configure the following properties in the lambda
+
+#### SOURCE_BUCKET
+
+Where the originals reside
+
+#### THUMBNAIL_DESTINATION_BUCKET
+
+Where the thumbnails are going to reside
+
+#### URL
+
+The cloud front URL
+
+#### VIDEO_SCREENSHOT_TIME_MARK (Optional)
+
+At what second of the video the screenshot is taken, defaults to 3
+
+#### DEFAULT_VIDEO_CHUNK_SIZE
+
+The default chunk size of the video (this is a chunk of the video needed for metadata) defaults to 10200
+
+
 
 ## License
 
