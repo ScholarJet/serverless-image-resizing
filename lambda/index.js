@@ -29,6 +29,8 @@ const URL = process.env.URL;
 const ALLOWED_DIMENSIONS = new Set();
 const THUMBNAIL_DESTINATION_BUCKET = process.env.THUMBNAIL_DESTINATION_BUCKET;
 
+const VIDEO_SCREENSHOT_TIME_MARK = process.env.VIDEO_SCREENSHOT_TIME_MARK || 5;
+
 if (process.env.ALLOWED_DIMENSIONS) {
   const dimensions = process.env.ALLOWED_DIMENSIONS.split(/\s*,\s*/);
   dimensions.forEach((dimension) => ALLOWED_DIMENSIONS.add(dimension));
@@ -36,10 +38,9 @@ if (process.env.ALLOWED_DIMENSIONS) {
 
 module.exports.handler = function(event, context, callback) {
   const info = getKeyInformation(event.queryStringParameters.key);
+  const url = `https://${SOURCE_BUCKET}.s3.amazonaws.com/${info.originalKeyWithParams}`;
 
-  const url = `https://s3.amazonaws.com/${SOURCE_BUCKET}/${info.originalKeyWithParams}`;
-
-  log('Checking for permission');
+  log('Checking for permission', event.queryStringParameters.key, info);
 
   getCanAccess(url)
     .then(canAccess => {
@@ -92,7 +93,7 @@ const handler = (event, context, callback) => {
           const OBJECT_URL = getOriginalObjectUrl(data, SOURCE_BUCKET, keyInfo.originalKey);
 
           log('Got video signed URL:', OBJECT_URL);
-          return Generators.video(OBJECT_URL, keyInfo.width, keyInfo.height);
+          return Generators.video(OBJECT_URL, keyInfo.width, keyInfo.height, VIDEO_SCREENSHOT_TIME_MARK);
         case FILE_TYPE_KEYS.pdf:
         case FILE_TYPE_KEYS.other:
           break;
@@ -137,7 +138,7 @@ const getObjectType = object => {
 };
 
 const getOriginalObjectUrl = (object, bucket, key) => {
-  return object.ACL === 'private' ? S3.getSignedUrl('getObject', {Bucket: bucket, Key: originalKey})
+  return object.ACL === 'private' || object.ACL === undefined ? S3.getSignedUrl('getObject', {Bucket: bucket, Key: key})
     : `https://s3.amazonaws.com/${bucket}/${key}`;
 };
 
@@ -148,19 +149,6 @@ const getCanAccess = url => {
     https.get(url, res => {
       log('Got response:', res.statusCode);
       resolve(res.statusCode === 200);
-      // log('Getting head of file: ', url);
-      // res.pipe(file);
-      // res.on('data', chunk => {
-      //   bytesReceived += chunk.length;
-      //   log('Received video chunk', chunk.length, bytesReceived);
-      //   if (bytesReceived > 1000) {
-      //     res.destroy();
-      //     file.close();
-      //     log('Got video head, getting media info');
-      //     _getMediaInfo(DEFAULT_VIDEO_HEAD_FILENAME)
-      //       .then(resolve, reject);
-      //   }
-      // });
     });
   });
 };
@@ -172,7 +160,6 @@ const getCanAccess = url => {
  */
 const getKeyInformation = key => {
   const match = key.match(/((\d+)x(\d+))\/(.*)/);
-  log('Getting dimensions', key, match);
 
   const originalPathInfo = getPathInfo(match[4]);
   const fullPathInfo = getPathInfo(key);

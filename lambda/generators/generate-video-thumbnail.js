@@ -16,6 +16,9 @@ const log = require('../util/log').log;
 
 const DEFAULT_VIDEO_HEAD_FILENAME = '/tmp/video-head';
 
+const DEFAULT_VIDEO_CHUNK_SIZE = process.env.DEFAULT_VIDEO_CHUNK_SIZE || 15240;
+
+
 /**
  *
  * @param objectPath
@@ -101,6 +104,7 @@ const _generateThumbnail = (objectPath,
     });
 
     tmpScreenShotFile.on('error', err => {
+      console.error('Error on screenshot file generation', err);
       reject(new VideoGenerationError(`There was a file error. ${err}`));
       done();
     });
@@ -111,8 +115,14 @@ const _generateThumbnail = (objectPath,
     });
 
     log('Running ffmpeg');
+
+    ffmpeg.stderr.on('data', function (data) {
+      console.log('stderr generating screenshot: ' + data.toString());
+    });
+
     ffmpeg.stdout.pipe(tmpScreenShotFile)
       .on('error', err => {
+        console.error('Error generating screenshot', err);
         reject(new VideoGenerationError(err));
         done();
       });
@@ -145,7 +155,7 @@ const getVideoDimenssions = (videoUrl) => {
       res.on('data', chunk => {
         bytesReceived += chunk.length;
         log('Received video chunk', chunk.length, bytesReceived);
-        if (bytesReceived > 15240) {
+        if (bytesReceived > DEFAULT_VIDEO_CHUNK_SIZE) {
           res.destroy();
           file.close();
           log('Got video head, getting media info');
