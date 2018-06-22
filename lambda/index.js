@@ -35,8 +35,12 @@ if (process.env.ALLOWED_DIMENSIONS) {
 }
 
 module.exports.handler = function(event, context, callback) {
-  const url = `https://s3.amazonaws.com/${SOURCE_BUCKET}/${getKeyInformation(event.queryStringParameters.key)
-    .originalKeyWithParams}`;
+  const info = getKeyInformation(event.queryStringParameters.key);
+
+  const url = `https://s3.amazonaws.com/${SOURCE_BUCKET}/${info.originalKeyWithParams}`;
+
+  log('Checking for permission');
+
   getCanAccess(url)
     .then(canAccess => {
       if (canAccess) {
@@ -176,7 +180,7 @@ const getKeyInformation = key => {
   return {
     originalKey: originalPathInfo.pathWithoutParams,
     originalParams: originalPathInfo.params,
-    originalKeyWithParams: originalPathInfo.pathWithoutParams,
+    originalKeyWithParams: originalPathInfo.path,
     thumbnailKey: fullPathInfo.pathWithoutParams,
     thumbnailKeyWithParams: key,
     thumbnailKeyParams: fullPathInfo.params,
