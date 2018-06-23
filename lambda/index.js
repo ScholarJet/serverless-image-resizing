@@ -184,14 +184,30 @@ const getKeyInformation = key => {
  */
 const getPathInfo = path => {
   const hasParams = path.indexOf('?') >= 0;
+
+  let pathWithParams = path;
+
   const pathWithoutParams =  hasParams ? path.substr(0, path.indexOf('?')) : path;
-  const params = hasParams ? path.substr(path.indexOf('?')) : undefined;
+  let params = hasParams ? path.substr(path.indexOf('?')) : undefined;
+
+  if (params.indexOf('?params=') >= 0) {
+    params = decodeHexparams(params.replace('?params=', ''));
+    pathWithParams = `${pathWithoutParams}?${params}`
+  }
 
   return {
-    path,
+    path: pathWithParams,
     pathWithoutParams,
     params,
     hasParams
   }
+};
 
+const decodeHexparams = hexParams => {
+  // https://gist.github.com/valentinkostadinov/5875467
+  let s = '';
+  for (let i = 0; i < hexParams.length; i+=2) {
+    s += String.fromCharCode(parseInt(hexParams.substr(i, 2), 16))
+  }
+  return decodeURIComponent(encodeURI(s))
 };
