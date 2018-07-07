@@ -30,6 +30,7 @@ const ALLOWED_DIMENSIONS = new Set();
 const THUMBNAIL_DESTINATION_BUCKET = process.env.THUMBNAIL_DESTINATION_BUCKET;
 
 const VIDEO_SCREENSHOT_TIME_MARK = process.env.VIDEO_SCREENSHOT_TIME_MARK || 5;
+const SECURED = process.env.SECURED || true;
 
 if (process.env.ALLOWED_DIMENSIONS) {
   const dimensions = process.env.ALLOWED_DIMENSIONS.split(/\s*,\s*/);
@@ -41,20 +42,23 @@ module.exports.handler = function(event, context, callback) {
   const url = `https://${SOURCE_BUCKET}.s3.amazonaws.com/${info.originalKeyWithParams}`;
 
   log('Checking for permission', event.queryStringParameters.key, info);
-
-  getCanAccess(url)
-    .then(canAccess => {
-      if (canAccess) {
-        handler(event, context, callback);
-      } else {
-        log('User does not have access to URL: ', url);
-        callback(null, {
-          statusCode: '403',
-          headers: {},
-          body: '',
-        });
-      }
-    })
+  if (!SECURED || SECURED === 'false') {
+    handler(event, context, callback);
+  } else {
+    getCanAccess(url)
+      .then(canAccess => {
+        if (canAccess) {
+          handler(event, context, callback);
+        } else {
+          log('User does not have access to URL: ', url);
+          callback(null, {
+            statusCode: '403',
+            headers: {},
+            body: '',
+          });
+        }
+      })
+  }
 };
 
 const handler = (event, context, callback) => {
