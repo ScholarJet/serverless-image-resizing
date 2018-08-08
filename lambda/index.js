@@ -163,8 +163,9 @@ const getCanAccess = url => {
  * @returns {{originalKey: string, originalParams: any, originalKeyWithParams: string, thumbnailKey: string, thumbnailKeyWithParams: *, thumbnailKeyParams: any, width: number, height: number, dimensions: *}}
  */
 const getKeyInformation = key => {
+  log('Getting key information', key);
   const match = key.match(/((\d+)x(\d+))\/(.*)/);
-
+  log('Extracted key match', match);
   const originalPathInfo = getPathInfo(match[4]);
   const fullPathInfo = getPathInfo(key);
 
@@ -194,7 +195,7 @@ const getPathInfo = path => {
   const pathWithoutParams =  hasParams ? path.substr(0, path.indexOf('?')) : path;
   let params = hasParams ? path.substr(path.indexOf('?')) : undefined;
 
-  if (params.indexOf('?params=') >= 0) {
+  if (hasParams && params && params.indexOf('?params=') >= 0) {
     params = decodeHexparams(params.replace('?params=', ''));
     pathWithParams = `${pathWithoutParams}?${params}`
   }
